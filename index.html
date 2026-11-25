@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Check which Chrome profile data survives a reload, browser restart, or profile fork with a disposable local storage marker.">
+  <title>Chrome profile persistence check</title>
+  <style>
+* { box-sizing: border-box; }
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  color: #17252c;
+  background: #f5f8f7;
+  line-height: 1.55;
+}
+body { margin: 0; }
+main { width: min(100% - 2.5rem, 56rem); margin: 3.2rem auto; }
+header { max-width: 43rem; margin-bottom: 1.75rem; }
+h1 { font-size: clamp(1.8rem, 5vw, 3.3rem); line-height: 1.13; margin: 0 0 .7rem; letter-spacing: -.04em; }
+h2 { font-size: 1.25rem; margin: 0 0 .8rem; }
+p { margin: 0; }
+a { color: #075e4d; text-underline-offset: .2em; }
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  border: 1px solid #c7d8d2;
+  border-radius: 1rem;
+  background: white;
+  overflow: hidden;
+}
+form, .results { min-width: 0; padding: 1.2rem; }
+label, dt { font-weight: 650; font-size: .9rem; }
+input {
+  display: block;
+  width: 100%;
+  margin: .4rem 0 .25rem;
+  padding: .65rem .75rem;
+  border: 1px solid #a9beba;
+  border-radius: .45rem;
+  color: inherit;
+  font: inherit;
+}
+small, #status { color: #3e554f; font-size: .87rem; }
+#status { margin-top: .45rem; min-height: 1.4rem; }
+.actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .85rem; }
+button {
+  padding: .55rem .65rem;
+  border: 1px solid #b8cbc5;
+  border-radius: .45rem;
+  background: white;
+  color: #16342c;
+  font: inherit;
+  font-size: .86rem;
+  cursor: pointer;
+}
+button[type="submit"] { background: #0c5948; border-color: #0c5948; color: white; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid #0d8373; outline-offset: 3px; }
+.results { margin: 0; background: #e9f4ef; }
+.results div + div { margin-top: 1.1rem; }
+dd { margin: .2rem 0 0; font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+.instructions { margin-top: 1.65rem; max-width: 47rem; }
+ol { margin: 0 0 1rem; padding-left: 1.4rem; }
+li + li { margin-top: .45rem; }
+code { background: #e6eeeb; border-radius: .2rem; padding: .1rem .25rem; }
+@media (max-width: 39rem) {
+  main { margin-top: 1.75rem; }
+  .workspace { grid-template-columns: 1fr; }
+  .results { border-top: 1px solid #c7d8d2; }
+}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Chrome profile persistence check</h1>
+    <p>Save a test marker, then see which state survives a reload, a browser restart, or a fork.</p>
+  </header>
+
+  <section class="workspace" aria-label="Browser storage check">
+    <form id="marker-form">
+      <label for="marker">Test marker</label>
+      <input id="marker" name="marker" value="source-check-1" maxlength="48" autocomplete="off" required>
+      <small>Use a short test label. Never enter credentials or personal data.</small>
+      <div class="actions">
+        <button type="submit">Save markers</button>
+        <button id="reload" type="button">Reload</button>
+        <button id="clear" type="button">Clear markers</button>
+      </div>
+      <p id="status" role="status"></p>
+    </form>
+
+    <dl class="results">
+      <div><dt>Saved in this browser profile</dt><dd id="saved-marker">—</dd></div>
+      <div><dt>Held in current page memory</dt><dd id="memory-marker">—</dd></div>
+    </dl>
+  </section>
+
+  <section class="instructions" aria-labelledby="instructions-title">
+    <h2 id="instructions-title">Check pause, resume, and fork</h2>
+    <ol>
+      <li>Open the standalone preview in a disposable test browser. Save <code>source-check-1</code> and reload. Only the saved marker should remain.</li>
+      <li>Pause and resume the test browser. Open the same preview URL and look for the saved marker.</li>
+      <li>Pause the source before forking it in Cloudbrowser. Resume the fork, open the same URL, and check that it inherited <code>source-check-1</code>.</li>
+      <li>Save <code>fork-check-2</code> in the fork. Switch back to the source and confirm it still shows <code>source-check-1</code>. With a one-browser concurrency limit, pause the fork before resuming the source.</li>
+    </ol>
+    <p>This checks local storage on this origin. Website login sessions can expire independently. See the <a href="https://cloudbrowser.tv/docs/browsers">Cloudbrowser browser lifecycle documentation</a> for pause, resume, and fork commands.</p>
+  </section>
+</main>
+<script>
+const markerKey = "cloudbrowser-chrome-profile-check-v1";
+const form = document.querySelector("#marker-form");
+const field = document.querySelector("#marker");
+const status = document.querySelector("#status");
+const saved = document.querySelector("#saved-marker");
+const memory = document.querySelector("#memory-marker");
+let pageMarker = null;
+
+function render(message = "") {
+  try {
+    saved.textContent = localStorage.getItem(markerKey) ?? "No saved marker";
+    status.textContent = message;
+  } catch {
+    saved.textContent = "Storage unavailable";
+    status.textContent = "Open the standalone preview if storage is blocked in the editor.";
+  }
+  memory.textContent = pageMarker ?? "No page marker";
+}
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const value = field.value.trim();
+  if (!value) {
+    render("Enter a short test label.");
+    field.focus();
+    return;
+  }
+  pageMarker = value;
+  try {
+    localStorage.setItem(markerKey, value);
+    render("Saved to local storage and page memory.");
+  } catch {
+    render("Local storage is blocked in this view.");
+  }
+});
+
+document.querySelector("#reload").addEventListener("click", () => location.reload());
+
+document.querySelector("#clear").addEventListener("click", () => {
+  pageMarker = null;
+  try {
+    localStorage.removeItem(markerKey);
+    render("Cleared both markers.");
+  } catch {
+    render("Local storage is blocked in this view.");
+  }
+});
+
+window.addEventListener("storage", (event) => {
+  if (event.key === markerKey || event.key === null) render();
+});
+
+render();
+</script>
+</body>
+</html>
