@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Compare document loading and application readiness across three interactive browser automation timelines.">
+<title>Check when a browser page is ready for automation</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eff4f2;color:#192a29;font:1rem/1.6 system-ui,sans-serif}
+main{max-width:47rem;margin:auto;padding:2.2rem 1.25rem 3rem}
+h1,h2{line-height:1.13;letter-spacing:-.025em}
+h1{font-size:clamp(2.1rem,7vw,3.6rem);margin:0}
+h2{font-size:1.35rem;margin:0 0 .7rem}
+p{margin:.8rem 0}
+.panel{margin:1.35rem 0;padding:1rem;background:#fff;border:1px solid #a6bbb6;border-radius:.7rem}
+label{display:block;font-weight:650;margin:.18rem 0}
+select,input{width:100%;font:inherit;min-height:2.75rem;color:inherit}
+select{padding:.35rem;background:#eff4f2;border:1px solid #6a8983;border-radius:.25rem;margin-bottom:.8rem}
+input[type=range]{accent-color:#255851;margin:0}
+.milestones{margin:.25rem 0 .75rem}
+.milestones div{display:flex;justify-content:space-between;gap:.65rem;border-bottom:1px solid #dce7e4;padding:.4rem 0}
+dt{font-weight:610}
+dd{margin:0;text-align:right}
+output{display:block;background:#e1eee8;padding:.65rem .8rem;border-radius:.35rem}
+a{color:#16554d;text-underline-offset:.16em}
+</style>
+</head>
+<body>
+<main>
+<h1>Check when a browser page is ready for automation</h1>
+<p>Wait for a signal that the next browser action can succeed. On a report page, that might mean the table is visible and its export button is enabled.</p>
+<section class="panel" aria-labelledby="timeline">
+<h2 id="timeline">Explore the readiness timeline</h2>
+<label for="scenario">Response scenario</label>
+<select id="scenario">
+<option value="slow">Report data arrives after page load</option>
+<option value="cached">Report is ready before page load</option>
+<option value="expired">The session has expired</option>
+</select>
+<label for="time">Time after navigation <span id="elapsed">600 ms</span></label>
+<input type="range" id="time" min="0" max="1600" step="20" value="600">
+<dl class="milestones">
+<div><dt>DOMContentLoaded</dt><dd id="dom">Reached at 360 ms</dd></div>
+<div><dt>Load event</dt><dd id="load">Reached at 560 ms</dd></div>
+<div><dt>Report ready</dt><dd id="app">Pending</dd></div>
+</dl>
+<output id="answer" aria-live="polite">Keep waiting for the report table and its enabled export button.</output>
+</section>
+<h2>Choose a condition the task can verify</h2>
+<p>The timelines use synthetic measurements. In Playwright, assert that the required element is visible or enabled, and detect a sign-in screen when the task requires an authenticated session. Use a bounded timeout so your workflow can report which condition failed.</p>
+<p>Use the <a href="https://playwright.dev/docs/actionability">Playwright actionability reference</a> for waiting behavior and the <a href="https://cloudbrowser.tv/docs/connections">Cloudbrowser connection guide</a> to attach your automation client to the remote Chrome desktop.</p>
+</main>
+<script>
+const timelines = {
+  slow: { dom: 360, load: 560, ready: 1320 },
+  cached: { dom: 400, load: 900, ready: 480 },
+  expired: { dom: 320, load: 520, signIn: 440 }
+};
+const scenario = document.querySelector("#scenario");
+const time = document.querySelector("#time");
+const status = document.querySelector("#answer");
+function milestone(now, due) {
+  return now >= due ? "Reached at " + due + " ms" : "Pending";
+}
+function render() {
+  const current = timelines[scenario.value];
+  const now = Number(time.value);
+  document.querySelector("#elapsed").textContent = now + " ms";
+  time.setAttribute("aria-valuetext", now + " milliseconds");
+  document.querySelector("#dom").textContent = milestone(now, current.dom);
+  document.querySelector("#load").textContent = milestone(now, current.load);
+  if (current.signIn !== undefined && now >= current.signIn) {
+    document.querySelector("#app").textContent = "Sign-in required";
+    status.textContent = "Stop the export workflow and restore the session.";
+    return;
+  }
+  const ready = current.ready !== undefined && now >= current.ready;
+  document.querySelector("#app").textContent = milestone(now, current.ready);
+  status.textContent = ready ? "The table is visible and Export is enabled. Continue the task." :
+    "Keep waiting for the report table and its enabled export button.";
+}
+scenario.addEventListener("change", render);
+time.addEventListener("input", render);
+render();
+</script>
+</body>
+</html>
