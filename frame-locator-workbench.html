@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Practice scoping a Playwright locator to the main document or an exact iframe with three matching button labels.">
+<title>Choose the correct frame for a browser action</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;color:#222b35;background:#f2f5f8;font:1rem/1.6 system-ui,sans-serif}
+main{max-width:55rem;margin:auto;padding:2.25rem 1.2rem 3rem}
+h1,h2{line-height:1.13;letter-spacing:-.028em}
+h1{font-size:clamp(2.1rem,6vw,3.5rem);margin:0}
+h2{font-size:1.34rem;margin:.15rem 0 .6rem}
+p{margin:.75rem 0}
+.panel{background:white;border:1px solid #abb9c4;border-radius:.65rem;padding:.9rem;margin:1.2rem 0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+iframe{border:1px solid #acb7cb;border-radius:.55rem;width:100%;height:154px;background:#fff}
+button{font:650 1rem system-ui,sans-serif;background:#24476b;color:#fff;border:0;border-radius:.35rem;min-height:2.75rem;padding:.5rem .65rem;cursor:pointer}
+[role=status]{min-height:1.5rem}
+pre{overflow:auto;padding:.85rem;border-radius:.35rem;background:#263748;color:#fff}
+a{color:#204d78;text-underline-offset:.18em}
+@media(max-width:540px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<h1>Choose the correct frame for a browser action</h1>
+<p>The main document and both embedded previews contain a button named <strong>Show details</strong>. Click one and check the confirmation in that same document.</p>
+<section class="panel" aria-labelledby="main-panel">
+<h2 id="main-panel">Main document</h2>
+<button type="button" id="main-details">Show details</button>
+<p role="status" id="main-status">Main details hidden.</p>
+</section>
+<section class="panel" aria-labelledby="embedded-panels">
+<h2 id="embedded-panels">Embedded previews</h2>
+<div class="grid">
+<iframe id="account-preview" title="Account preview" sandbox="allow-scripts"></iframe>
+<iframe id="schedule-preview" title="Schedule preview" sandbox="allow-scripts"></iframe>
+</div>
+</section>
+<h2>Scope the action and its confirmation</h2>
+<p>For the Schedule preview, identify the iframe by its stable ID. Use the frame locator for both the button and the confirmation.</p>
+<pre><code>const schedule = page.frameLocator('#schedule-preview');
+await schedule.getByRole('button', {
+  name: 'Show details',
+  exact: true
+}).click();
+await expect(schedule.getByRole('status'))
+  .toHaveText('Schedule details shown.');</code></pre>
+<p>These fixtures simulate details panels. When testing a form, use the same frame-scoped check after a safe action and review one record before proceeding with a batch. See the <a href="https://playwright.dev/docs/frames">Playwright frame guide</a> and the <a href="https://cloudbrowser.tv/blog/browser-automation-tool-fill-web-forms-automatically">Cloudbrowser web form automation walkthrough</a>.</p>
+</main>
+<script>
+const frameHead = '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:1rem/1.4 system-ui,sans-serif;margin:.68rem;color:#222b35}h3{margin:0 0 .45rem}button{font:650 1rem system-ui,sans-serif;background:#24476b;color:white;border:0;border-radius:.35rem;min-height:2.75rem;padding:.5rem .65rem;cursor:pointer}p{margin:.5rem 0}</style>';
+function renderPreview(id, name) {
+  const frame = document.querySelector(id);
+  frame.srcdoc = frameHead + '<body><h3>' + name + ' preview</h3>' +
+    '<button type="button">Show details</button><p role="status">' + name + ' details hidden.</p>' +
+    '<script>document.querySelector("button").addEventListener("click",()=>{' +
+    'document.querySelector("[role=status]").textContent=' + JSON.stringify(name + ' details shown.') +
+    ';});<\/script></body></html>';
+}
+renderPreview('#account-preview', 'Account');
+renderPreview('#schedule-preview', 'Schedule');
+document.querySelector('#main-details').addEventListener('click', () => {
+  document.querySelector('#main-status').textContent = 'Main details shown.';
+});
+</script>
+</body>
+</html>
