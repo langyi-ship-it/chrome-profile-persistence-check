@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Browser fork acceptance worksheet</title>
+<style>
+:root{color-scheme:light;--ink:#172b34;--muted:#4c626d;--paper:#f7faf6;--line:#c5d5ce;--accent:#125746;--panel:#e8f1ec}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:1rem/1.6 system-ui,sans-serif}
+main{max-width:66rem;margin:auto;padding:clamp(1.2rem,4vw,3rem)}
+h1{font-size:clamp(2rem,5vw,3.5rem);line-height:1.1;letter-spacing:-.04em;margin:0 0 1rem}
+h2{font-size:1.22rem;margin-top:0}
+h3{margin:0 0 .25rem;font-size:1.14rem}
+p{margin:.6rem 0 1rem}
+ol{padding-left:1.4rem}
+li{margin:.4rem 0}
+code,input{font-family:ui-monospace,monospace}
+a{color:var(--accent);text-underline-offset:.2em}
+.actions{display:flex;gap:.55rem;flex-wrap:wrap;margin:1rem 0}
+button{font:inherit;font-weight:600;border:1px solid var(--line);border-radius:.45rem;padding:.45rem .75rem;background:#fff;color:var(--ink);cursor:pointer}
+button[type=submit]{color:white;background:var(--accent);border-color:var(--accent)}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #6d972f;outline-offset:2px}
+.observations{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
+.observations > div{border:1px solid var(--line);border-radius:.4rem;background:white;padding:.65rem .8rem}
+label{display:block;font-weight:650}
+label span{display:block;font-size:.89rem;font-weight:450;color:var(--muted)}
+input{font-size:1rem;width:100%;padding:.45rem .5rem;margin-top:.4rem;border:1px solid var(--line);border-radius:.3rem;color:var(--ink);background:white}
+[data-status]{margin:.35rem 0 0;font-size:.91rem;color:var(--muted);min-height:1.5rem}
+.result{padding:.9rem 1rem;margin:1rem 0;background:var(--panel);border:1px solid var(--line);border-left:.3rem solid var(--accent);border-radius:.4rem}
+.result p{margin:0}
+footer{border-top:1px solid var(--line);padding-top:.8rem;margin-top:1.6rem}
+@media(max-width:41rem){.observations{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Browser fork acceptance worksheet</h1>
+  <p>Record four marker reads to check whether a paused Cloudbrowser fork copied persistent state and kept later writes separate.</p>
+</header>
+<section>
+  <h2>Collect observations</h2>
+  <ol>
+    <li>In a test browser you control, write <code>before-fork</code> to a harmless persistent marker on a test origin.</li>
+    <li>Pause the source before creating the fork. Resume the two browsers separately and read the marker in the child.</li>
+    <li>Write <code>child-only</code> in the child. Read the original marker again in the source.</li>
+    <li>Write <code>source-only</code> in the source. Read the child and source again through their separate connections.</li>
+  </ol>
+  <p>Use the same origin for all reads and writes. If you use a cookie, set an explicit expiry and keep its path in scope. The worksheet checks recorded observations. Use separate tests for website login or in-memory page state.</p>
+</section>
+<section>
+  <h2>Evaluate the marker reads</h2>
+  <div class="actions" aria-label="Load synthetic sample">
+    <button type="button" data-sample="pass">Independent changes</button>
+    <button type="button" data-sample="stale">Stale snapshot</button>
+    <button type="button" data-sample="leak">Write reached source</button>
+    <button type="button" data-sample="missing">Missing child read</button>
+  </div>
+  <form id="observations">
+    <div class="observations">
+      <div><label for="inherited">1. Child reads after fork<span>Expected <code>before-fork</code></span></label><input id="inherited" autocomplete="off" spellcheck="false" maxlength="80" aria-describedby="inherited-result"><p id="inherited-result" data-status></p></div>
+      <div><label for="source-retained">2. Source reads after child writes<span>Expected <code>before-fork</code></span></label><input id="source-retained" autocomplete="off" spellcheck="false" maxlength="80" aria-describedby="source-retained-result"><p id="source-retained-result" data-status></p></div>
+      <div><label for="child-retained">3. Child reads after source writes<span>Expected <code>child-only</code></span></label><input id="child-retained" autocomplete="off" spellcheck="false" maxlength="80" aria-describedby="child-retained-result"><p id="child-retained-result" data-status></p></div>
+      <div><label for="source-updated">4. Source reads its own new marker<span>Expected <code>source-only</code></span></label><input id="source-updated" autocomplete="off" spellcheck="false" maxlength="80" aria-describedby="source-updated-result"><p id="source-updated-result" data-status></p></div>
+    </div>
+    <div class="actions">
+      <button type="submit">Check observations</button>
+      <button type="reset">Clear observations</button>
+    </div>
+  </form>
+  <div class="result" aria-live="polite" aria-atomic="true">
+    <h3 id="verdict"></h3><p id="detail"></p>
+  </div>
+  <p>Browser marker inputs stay on this page. If a read fails, check that pause completed, verify the origin and expiry, and confirm that the source and child connections refer to different browsers.</p>
+</section>
+<footer><a href="https://cloudbrowser.tv/docs/browsers">Cloudbrowser browser lifecycle and fork consistency guide</a></footer>
+</main>
+<script>
+'use strict';
+const checks = [
+  ['inherited', 'before-fork'],
+  ['source-retained', 'before-fork'],
+  ['child-retained', 'child-only'],
+  ['source-updated', 'source-only'],
+];
+const expected = Object.fromEntries(checks);
+const samples = {
+  pass: expected,
+  stale: {...expected, inherited: 'older-marker'},
+  leak: {...expected, 'source-retained': 'child-only'},
+  missing: {...expected, 'child-retained': ''},
+};
+const form = document.getElementById('observations');
+function render() {
+  const outcome = checks.map(([id, wanted]) => {
+    const observed = document.getElementById(id).value.trim();
+    const state = observed === '' ? 'Missing' : observed === wanted ? 'Pass' : 'Mismatch';
+    document.getElementById(id + '-result').textContent = state;
+    return state;
+  });
+  const failed = outcome.filter(state => state === 'Mismatch').length;
+  const missing = outcome.filter(state => state === 'Missing').length;
+  document.getElementById('verdict').textContent =
+    failed ? 'Investigate a mismatch' : missing ? 'Incomplete observations' : 'Acceptance checks pass';
+  document.getElementById('detail').textContent =
+    (4 - failed - missing) + ' matched · ' + failed + ' mismatched · ' + missing + ' missing';
+}
+function loadSample(sample) {
+  for (const [id] of checks) document.getElementById(id).value = samples[sample][id];
+  render();
+}
+form.addEventListener('submit', event => {
+  event.preventDefault();
+  render();
+});
+form.addEventListener('reset', () => setTimeout(render, 0));
+document.querySelectorAll('[data-sample]').forEach(button => {
+  button.addEventListener('click', () => loadSample(button.dataset.sample));
+});
+render();
+</script>
+</body>
+</html>
