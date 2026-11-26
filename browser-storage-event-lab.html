@@ -1,0 +1,81 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Open a second tab and watch a sample status change. Compare the value each tab sees with the storage events it actually receives."><title>See which browser tab receives a storage update</title><style>:root{font:100%/1.55 system-ui,sans-serif;color:#192e32;background:#eff5f5;color-scheme:light}
+*{box-sizing:border-box}body{margin:0}main{max-width:49rem;margin:auto;padding:clamp(1rem,5vw,3rem) 1rem 3.25rem}
+h1,h2,p,dl,dd{margin:0}h1{font-size:clamp(1.95rem,6vw,3.45rem);line-height:1.08;letter-spacing:-.055em;max-width:20ch}h2{font-size:1.22rem}
+p{margin-top:.65rem;color:#364b4e}section{margin-top:1rem;background:#fff;border:1px solid #c7dada;border-radius:.83rem;padding:clamp(1rem,4vw,1.5rem)}
+.actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0}.actions[hidden]{display:none}
+button,.button{font:inherit;font-weight:680;color:#1b4752;cursor:pointer;border:1px solid #86a6ab;background:#edf6f6;padding:.48rem .7rem;min-height:44px;border-radius:.42rem}
+.button{display:inline-flex;align-items:center;text-decoration:none;background:#1f6170;color:white;border-color:#1f6170}
+button:focus-visible,a:focus-visible{outline:3px solid #a84c2b;outline-offset:3px}
+a{color:#1c5964;text-underline-offset:.15em}dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.72rem;background:#eff7f6;padding:.85rem;border-radius:.5rem}
+dt{font-size:.85rem;color:#426267}dd{font-weight:750;overflow-wrap:anywhere}#last-event{font-weight:630}#storage-error{color:#822f21}</style></head><body><main><header><h1>See which browser tab receives a storage update</h1><p>Open a second tab and watch a sample status change. Compare the value each tab sees with the storage events it actually receives.</p></header>
+<section aria-labelledby="run-lab">
+<h2 id="run-lab">Send a status change</h2>
+<p id="writer-help">Open an observer tab. In the original tab, choose <strong>Set Ready</strong> twice and then <strong>Set Reviewed</strong>. Compare the two event counts.</p>
+<p id="observer-help" hidden>Switch to the original tab and change the status. This tab updates as changes reach it.</p>
+<div class="actions" id="writer-actions">
+<a class="button" id="open-observer" href="#observer" target="_blank" rel="noopener">Open observer tab</a>
+<button type="button" id="set-ready">Set Ready</button>
+<button type="button" id="set-reviewed">Set Reviewed</button>
+<button type="button" id="clear-value">Clear demo value</button>
+</div>
+<p id="storage-error" role="alert" hidden>This page could not access browser storage. Open the page directly in a browser tab and allow storage for this site.</p>
+<dl><div><dt>Tab role</dt><dd id="tab-role">Writer</dd></div><div><dt>Current status</dt><dd id="value">No value</dd></div><div><dt>Events received here</dt><dd id="events">0</dd></div></dl>
+<p id="last-event" role="status">No storage event received in this tab.</p>
+</section>
+<section aria-labelledby="read-lab">
+<h2 id="read-lab">Test the boundary between tabs and profiles</h2>
+<p>The writer can read its change straight away. This demo handles the writer's update in its button code because a write doesn't send that tab a <code>storage</code> event. The other tab receives an event when the stored value changes. Writing the same value again leaves the event count where it was.</p>
+<p>For an automation test, open both tabs in one browser context, then repeat with the observer in a fresh context. Assert the actual status and event count in each. Check the <a href="https://cloudbrowser.tv/docs/concepts">Cloudbrowser guide to isolated browser profiles</a> for the distinction between tabs in one profile and separate browsers. The <a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/storage_event">MDN storage event reference</a> describes which windows receive the event.</p>
+<p>The exercise writes a single sample status on this site. <strong>Clear demo value</strong> removes that one key.</p>
+</section></main><script>(() => {
+  const key = 'browser-storage-event-lab:review-status';
+  const value = document.querySelector('#value');
+  const eventCount = document.querySelector('#events');
+  const last = document.querySelector('#last-event');
+  const error = document.querySelector('#storage-error');
+  const actions = document.querySelector('#writer-actions');
+  const observer = location.hash === '#observer';
+  let count = 0;
+  let area;
+
+  document.querySelector('#tab-role').textContent = observer ? 'Observer' : 'Writer';
+  document.querySelector('#writer-help').hidden = observer;
+  document.querySelector('#observer-help').hidden = !observer;
+  actions.hidden = observer;
+
+  const render = status => {
+    value.textContent = status === 'Ready' || status === 'Reviewed' ? status : 'No value';
+  };
+
+  try {
+    area = window.localStorage;
+    render(area.getItem(key));
+  } catch {
+    error.hidden = false;
+    actions.querySelectorAll('button').forEach(button => { button.disabled = true; });
+    return;
+  }
+
+  const update = status => {
+    try {
+      if (status === null) area.removeItem(key);
+      else area.setItem(key, status);
+      render(area.getItem(key));
+    } catch {
+      error.hidden = false;
+    }
+  };
+
+  window.addEventListener('storage', event => {
+    if (event.storageArea !== area || event.key !== key) return;
+    render(event.newValue);
+    eventCount.textContent = String(++count);
+    last.textContent = event.newValue === null
+      ? 'This tab received a removal event.'
+      : 'This tab received a status change.';
+  });
+
+  document.querySelector('#set-ready').addEventListener('click', () => update('Ready'));
+  document.querySelector('#set-reviewed').addEventListener('click', () => update('Reviewed'));
+  document.querySelector('#clear-value').addEventListener('click', () => update(null));
+})();</script></body></html>
